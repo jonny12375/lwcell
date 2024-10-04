@@ -751,7 +751,7 @@ extern const size_t lwcell_dev_model_map_size;
 #define LWCELL_MSG_VAR_DEFINE(name) lwcell_msg_t* name
 #define LWCELL_MSG_VAR_ALLOC(name, blocking)                                                                           \
     do {                                                                                                               \
-        (name) = lwcell_mem_malloc(sizeof(*(name)));                                                                   \
+        (name) = (lwcell_msg_t*)lwcell_mem_malloc(sizeof(*(name)));                                                                   \
         LWCELL_DEBUGW(LWCELL_CFG_DBG_VAR | LWCELL_DBG_TYPE_TRACE, (name) != NULL,                                      \
                       "[MSG VAR] Allocated %d bytes at %p\r\n", (int)sizeof(*(name)), (void*)(name));                  \
         LWCELL_DEBUGW(LWCELL_CFG_DBG_VAR | LWCELL_DBG_TYPE_TRACE, (name) == NULL,                                      \
