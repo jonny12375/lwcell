@@ -1956,7 +1956,7 @@ lwcelli_initiate_cmd(lwcell_msg_t* msg) {
             lwcelli_send_number(msg->msg.conn_start.socket_id, 0, 1);
             static const int kUdpAggregationTimeMs = 36000;
             lwcelli_send_number(kUdpAggregationTimeMs, 0, 1);
-            static const int kUdpBufferAggregation = 1500;
+            static const int kUdpBufferAggregation = 1;
             lwcelli_send_number(kUdpBufferAggregation, 0, 1);
             AT_PORT_SEND_END_AT();
             break;
