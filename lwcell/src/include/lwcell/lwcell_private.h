@@ -256,6 +256,12 @@ typedef enum {
     LWCELL_CMD_CSMP,         /*!< Set SMS Text Mode Parameters */
     LWCELL_CMD_CSMS,         /*!< Select Message Service */
 
+    LWCELL_CMD_REBOOT,       /*!< muRata reboot */
+    LWCELL_CMD_RATACT,       /*!< muRata RATACT */
+    LWCELL_CMD_CEREG_SET,    /*!< Network Registration set output */
+    LWCELL_CMD_CEREG_GET,    /*!< Get current network registration status */
+    LWCELL_CMD_NULL,         /*!< Send nothing, wait for a response. */
+
     LWCELL_CMD_END, /*!< Last CMD entry */
 } lwcell_cmd_t;
 
@@ -538,6 +544,11 @@ typedef struct lwcell_msg {
             const char* pass; /*!< APN password */
         } network_attach;     /*!< Settings for network attach */
 #endif                        /* LWCELL_CFG_NETWORK || __DOXYGEN__ */
+
+        struct {
+            const char* rat_name;
+            uint8_t persistent;
+        } ratact;
     } msg;                    /*!< Group of different possible message contents */
 } lwcell_msg_t;
 

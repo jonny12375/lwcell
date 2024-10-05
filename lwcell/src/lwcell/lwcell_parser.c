@@ -344,6 +344,44 @@ lwcelli_parse_creg(const char* str, uint8_t skip_first) {
 }
 
 /**
+ * \brief           Parse received +CREG message
+ * \param[in]       str: Input string to parse from
+ * \param[in]       skip_first: Set to `1` to skip first number
+ * \return          1 on success, 0 otherwise
+ */
+uint8_t
+lwcelli_parse_cereg(const char* str, uint8_t skip_first) {
+    if (*str == '+') {
+        str += 8;
+    }
+
+    if (skip_first) {
+        lwcelli_parse_number(&str);
+    }
+    lwcell.m.network.status = (lwcell_network_reg_status_t)lwcelli_parse_number(&str);
+
+    /*
+     * In case we are connected to network,
+     * scan for current network info
+     */
+    if (lwcell.m.network.status == LWCELL_NETWORK_REG_STATUS_CONNECTED
+        || lwcell.m.network.status == LWCELL_NETWORK_REG_STATUS_CONNECTED_ROAMING) {
+        /* Try to get operator */
+        /* Notify user in case we are not able to add new command to queue */
+        lwcell_operator_get(&lwcell.m.network.curr_operator, NULL, NULL, 0);
+#if LWCELL_CFG_NETWORK
+    } else if (lwcell_network_is_attached()) {
+        lwcell_network_check_status(NULL, NULL, 0); /* Do the update */
+#endif                                              /* LWCELL_CFG_NETWORK */
+    }
+
+    /* Send callback event */
+    lwcelli_send_cb(LWCELL_EVT_NETWORK_REG_CHANGED);
+
+    return 1;
+}
+
+/**
  * \brief           Parse received +CSQ signal value
  * \param[in]       str: Input string
  * \return          1 on success, 0 otherwise

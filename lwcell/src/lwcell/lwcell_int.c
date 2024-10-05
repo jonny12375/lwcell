@@ -766,6 +766,8 @@ lwcelli_parse_received(lwcell_recv_t* rcv) {
 #endif                                                                                 /* LWCELL_CFG_CONN */
         } else if (!strncmp(rcv->data, "+CREG", 5)) {                                  /* Check for +CREG indication */
             lwcelli_parse_creg(rcv->data, LWCELL_U8(CMD_IS_CUR(LWCELL_CMD_CREG_GET))); /* Parse +CREG response */
+        } else if (!strncmp(rcv->data, "+CEREG", 5)) {                                  /* Check for +CEREG indication */
+            lwcelli_parse_cereg(rcv->data, LWCELL_U8(CMD_IS_CUR(LWCELL_CMD_CEREG_GET))); /* Parse +CREG response */
         } else if (!strncmp(rcv->data, "+CPIN", 5)) { /* Check for +CPIN indication for SIM */
             lwcelli_parse_cpin(rcv->data, 1 /* !CMD_IS_DEF(LWCELL_CMD_CPIN_SET) */); /* Parse +CPIN response */
         } else if (CMD_IS_CUR(LWCELL_CMD_COPS_GET) && !strncmp(rcv->data, "+COPS", 5)) {
@@ -812,8 +814,15 @@ lwcelli_parse_received(lwcell_recv_t* rcv) {
 #endif                                     /* LWCELL_CFG_PHONEBOOK */
         }
 
-        /* Messages not starting with '+' sign */
-    } else {
+    } else if (rcv->data[0] == '%') {
+        if (!strncmp(rcv->data, "%BOOTEV:", 8)) {
+            lwcelli_send_cb(LWCELL_EVT_BOOT_COMPLETE);
+            stat.is_ok = 1;
+        }
+    }
+
+    /* Messages not starting with '+' sign */
+    else {
         if (rcv->data[0] == 'S' && !strncmp(rcv->data, "SHUT OK" CRLF, 7 + CRLF_LEN)) {
             stat.is_ok = 1;
 #if LWCELL_CFG_CONN
@@ -1751,6 +1760,30 @@ lwcelli_initiate_cmd(lwcell_msg_t* msg) {
             AT_PORT_SEND_END_AT();
             break;
         }
+        case LWCELL_CMD_REBOOT: {
+            AT_PORT_SEND_BEGIN_AT();
+            AT_PORT_SEND_CONST_STR("Z");
+            AT_PORT_SEND_END_AT();
+            break;
+        }
+        case LWCELL_CMD_NULL:
+            // Don't send anything, just wait for a positive response.
+            break;
+        case LWCELL_CMD_RATACT: {
+            AT_PORT_SEND_BEGIN_AT();
+            AT_PORT_SEND_CONST_STR("%RATACT=\"");
+            AT_PORT_SEND_STR(msg->msg.ratact.rat_name);
+            AT_PORT_SEND_CONST_STR("\",");
+            if (msg->msg.ratact.persistent)
+            {
+                AT_PORT_SEND_CONST_STR("\"1\"");
+            } else {
+
+                AT_PORT_SEND_CONST_STR("\"0\"");
+            }
+            AT_PORT_SEND_END_AT();
+            break;
+        }
         case LWCELL_CMD_ATE0:
         case LWCELL_CMD_ATE1: {
             AT_PORT_SEND_BEGIN_AT();
@@ -1807,6 +1840,18 @@ lwcelli_initiate_cmd(lwcell_msg_t* msg) {
         case LWCELL_CMD_CREG_GET: { /* Get network registration status */
             AT_PORT_SEND_BEGIN_AT();
             AT_PORT_SEND_CONST_STR("+CREG?");
+            AT_PORT_SEND_END_AT();
+            break;
+        }
+        case LWCELL_CMD_CEREG_SET: { /* Enable +CREG message */
+            AT_PORT_SEND_BEGIN_AT();
+            AT_PORT_SEND_CONST_STR("+CEREG=2");
+            AT_PORT_SEND_END_AT();
+            break;
+        }
+        case LWCELL_CMD_CEREG_GET: { /* Get network registration status */
+            AT_PORT_SEND_BEGIN_AT();
+            AT_PORT_SEND_CONST_STR("+CEREG?");
             AT_PORT_SEND_END_AT();
             break;
         }

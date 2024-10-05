@@ -47,6 +47,7 @@ uint8_t lwcelli_parse_mac(const char** src, lwcell_mac_t* mac);
 
 uint8_t lwcelli_parse_cpin(const char* str, uint8_t send_evt);
 uint8_t lwcelli_parse_creg(const char* str, uint8_t skip_first);
+uint8_t lwcelli_parse_cereg(const char* str, uint8_t skip_first);
 uint8_t lwcelli_parse_csq(const char* str);
 
 uint8_t lwcelli_parse_cmgs(const char* str, size_t* num);
