@@ -68,6 +68,11 @@ uint8_t lwcelli_parse_cpbf(const char* str);
 
 uint8_t lwcelli_parse_cipstatus_conn(const char* str, uint8_t is_conn_line, uint8_t* continueScan);
 
+uint8_t
+lwcelli_parse_socketcmd_allocate(const char* str);
+uint8_t
+lwcelli_parse_socketdata_send(const char* str, uint8_t *socket_id, size_t* data_sent);
+
 uint8_t lwcelli_parse_ipd(const char* str);
 
 #if defined(__cplusplus)

@@ -589,6 +589,41 @@ lwcelli_tcpip_process_send_data(void) {
 }
 
 /**
+ * \brief           Process and send data from device buffer
+ * \return          Member of \ref lwcellr_t enumeration
+ */
+static lwcellr_t
+lwcelli_socket_tcpip_process_send_data(void) {
+    lwcell_conn_t* c = lwcell.msg->msg.conn_send.conn;
+    if (!lwcell_conn_is_active(c) ||                  /* Is the connection already closed? */
+        lwcell.msg->msg.conn_send.val_id != c->val_id /* Did validation ID change after we set parameter? */
+    ) {
+        /* Send event to user about failed send event */
+        CONN_SEND_DATA_SEND_EVT(lwcell.msg, lwcellCLOSED);
+        return lwcellERR;
+    }
+    lwcell.msg->msg.conn_send.sent = LWCELL_MIN(lwcell.msg->msg.conn_send.btw, LWCELL_CFG_CONN_MAX_DATA_LEN);
+
+    AT_PORT_SEND_BEGIN_AT();
+    AT_PORT_SEND_CONST_STR("%SOCKETDATA=");
+    lwcelli_send_string("SEND", 0, 1, 0);
+    lwcelli_send_number(LWCELL_U32(c->socket_id), 0, 1); /* Send socket ID */
+    lwcelli_send_number(LWCELL_U32(lwcell.msg->msg.conn_send.sent), 0, 1); /* Send length number */
+
+    AT_PORT_SEND_STR(",\"");
+    for (size_t i = 0; i < lwcell.msg->msg.conn_send.sent; i++ )
+    {
+        char str[2];
+        lwcell_u8_to_hex_str(lwcell.msg->msg.conn_send.data[i], str, 2);
+        AT_PORT_SEND_STR(str);         /* Send str */
+    }
+    AT_PORT_SEND_CHR("\"");
+
+    AT_PORT_SEND_END_AT();
+    return lwcellOK;
+}
+
+/**
  * \brief           Process data sent and send remaining
  * \param[in]       sent: Status whether data were sent or not,
  *                      info received from GSM with "SEND OK" or "SEND FAIL"
@@ -1013,8 +1048,48 @@ lwcelli_parse_received(lwcell_recv_t* rcv) {
                 stat.is_ok = 1;
             }
         } else if (CMD_IS_CUR(LWCELL_CMD_SOCKETCMD_ALLOCATE)) {
-            if (!stat.is_error) {}
+            if (!stat.is_error) {
+                if (!strncmp(rcv->data, "%SOCKETCMD:", 11))
+                {
+                    const uint8_t port_num = lwcelli_parse_socketcmd_allocate(rcv->data);
+                    lwcell_conn_t *conn = *lwcell.msg->msg.conn_start.conn;
+                    conn->socket_id = port_num;
+                    lwcell.msg->msg.conn_start.socket_id = port_num;
+                }
+            }
+        } else if (CMD_IS_CUR(LWCELL_CMD_SOCKETCMD_ACTIVATE)) {
+            if (stat.is_ok)
+            {
+                lwcell.msg->msg.conn_start.conn_res = LWCELL_CONN_CONNECT_OK;
+                lwcell_conn_t *conn = *lwcell.msg->msg.conn_start.conn;
+                conn->status.f.client = 1;
 
+                uint8_t id = conn->val_id;
+                uint8_t num = lwcell.msg->msg.conn_start.num;
+                LWCELL_MEMSET(conn, 0x00, sizeof(*conn)); /* Reset connection parameters */
+                conn->num = num;
+                conn->status.f.active = 1;
+                conn->val_id = ++id; /* Set new validation ID */
+                conn->evt_func = lwcell.msg->msg.conn_start.evt_func;
+                conn->arg = lwcell.msg->msg.conn_start.arg;
+                conn->socket_id = lwcell.msg->msg.conn_start.socket_id;
+            }
+        } else if (CMD_IS_CUR(LWCELL_CMD_SOCKETDATA_SEND)) {
+            if (!strncmp(rcv->data, "%SOCKETDATA:", 12))
+            {
+                uint8_t socket_id;
+                size_t data_sent;
+                lwcelli_parse_socketdata_send(rcv->data, &socket_id, &data_sent);
+                if (socket_id == lwcell.msg->msg.conn_send.conn->socket_id)
+                {
+                    lwcell.msg->msg.conn_send.sent_all += data_sent;
+                    lwcell.msg->msg.conn_send.btw -= data_sent;
+                    lwcell.msg->msg.conn_send.ptr += data_sent;
+                    if (lwcell.msg->msg.conn_send.bw != NULL) {
+                        *lwcell.msg->msg.conn_send.bw += data_sent;
+                    }
+                }
+            }
 #if LWCELL_CFG_USSD
         } else if (CMD_IS_CUR(LWCELL_CMD_CUSD)) {
             /* OK is returned before +CUSD */
@@ -1725,11 +1800,9 @@ lwcelli_process_sub_cmd(lwcell_msg_t* msg, lwcell_status_flags_t* stat) {
         } else if (msg->i == 1 && CMD_IS_CUR(LWCELL_CMD_SOCKETCMD_SETOPT)) {
             SET_NEW_CMD(LWCELL_CMD_SOCKETCMD_ACTIVATE); /* Now actually start connection */
         } else if (msg->i == 2 && CMD_IS_CUR(LWCELL_CMD_SOCKETCMD_ACTIVATE)) {
-            SET_NEW_CMD(LWCELL_CMD_SOCKETCMD_INFO); /* Go to status mode */
             if (stat->is_error) {
                 msg->msg.conn_start.conn_res = LWCELL_CONN_CONNECT_ERROR;
             }
-        } else if (msg->i == 3 && CMD_IS_CUR(LWCELL_CMD_SOCKETCMD_INFO)) {
             /* After second CIP status, define what to do next */
             switch (msg->msg.conn_start.conn_res) {
                 case LWCELL_CONN_CONNECT_OK: {                                      /* Successfully connected */
@@ -1880,8 +1953,7 @@ lwcelli_initiate_cmd(lwcell_msg_t* msg) {
             AT_PORT_SEND_BEGIN_AT();
             AT_PORT_SEND_CONST_STR("%SOCKETCMD=");
             lwcelli_send_string("SETOPT", 0, 1, 0);
-            static const int temp_socket_id = 1;
-            lwcelli_send_number(temp_socket_id, 0, 1);
+            lwcelli_send_number(msg->msg.conn_start.socket_id, 0, 1);
             static const int kUdpAggregationTimeMs = 36000;
             lwcelli_send_number(kUdpAggregationTimeMs, 0, 1);
             static const int kUdpBufferAggregation = 1500;
@@ -1889,16 +1961,26 @@ lwcelli_initiate_cmd(lwcell_msg_t* msg) {
             AT_PORT_SEND_END_AT();
             break;
         }
-
         case LWCELL_CMD_SOCKETCMD_ACTIVATE: {
             AT_PORT_SEND_BEGIN_AT();
             AT_PORT_SEND_CONST_STR("%SOCKETCMD=");
             lwcelli_send_string("ACTIVATE", 0, 1, 0);
-            static const int temp_socket_id = 1;
-            lwcelli_send_number(temp_socket_id, 0, 1);
+            lwcelli_send_number(msg->msg.conn_start.socket_id, 0, 1);
             AT_PORT_SEND_END_AT();
             break;
         }
+        case LWCELL_CMD_SOCKETCMD_INFO: {
+            AT_PORT_SEND_BEGIN_AT();
+            AT_PORT_SEND_CONST_STR("%SOCKETCMD=");
+            lwcelli_send_string("INFO", 0, 1, 0);
+            lwcelli_send_number(msg->msg.conn_start.socket_id, 0, 1);
+            AT_PORT_SEND_END_AT();
+            break;
+        }
+        case LWCELL_CMD_SOCKETDATA_SEND: {
+            return lwcelli_socket_tcpip_process_send_data(); /* Process send data */
+        }
+
         case LWCELL_CMD_ATE0:
         case LWCELL_CMD_ATE1: {
             AT_PORT_SEND_BEGIN_AT();

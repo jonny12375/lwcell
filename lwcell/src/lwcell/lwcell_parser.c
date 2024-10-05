@@ -984,6 +984,22 @@ lwcelli_parse_cipstatus_conn(const char* str, uint8_t is_conn_line, uint8_t* con
     return 1;
 }
 
+uint8_t
+lwcelli_parse_socketcmd_allocate(const char* str)
+{
+    str += 11; // skip "%SOCKETCMD:"
+    return lwcelli_parse_number(&str);
+}
+
+uint8_t
+lwcelli_parse_socketdata_send(const char* str, uint8_t *socket_id, size_t* data_sent)
+{
+    str += 12; // skip "%SOCKETDATA:"
+    *socket_id = lwcelli_parse_number(&str);
+    *data_sent = lwcelli_parse_number(&str);
+    return 1;
+}
+
 /**
  * \brief           Parse IPD or RECEIVE statements
  * \param[in]       str: Input string

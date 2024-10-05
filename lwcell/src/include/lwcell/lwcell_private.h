@@ -281,6 +281,7 @@ typedef enum {
 typedef struct lwcell_conn {
     lwcell_conn_type_t type;   /*!< Connection type */
     uint8_t num;               /*!< Connection number */
+    uint8_t socket_id;         /*!< Socket ID assigned by module */
     lwcell_ip_t remote_ip;     /*!< Remote IP address */
     lwcell_port_t remote_port; /*!< Remote port number */
     lwcell_port_t local_port;  /*!< Local IP address */
@@ -440,6 +441,7 @@ typedef struct lwcell_msg {
             void* arg;                          /*!< Connection custom argument */
             lwcell_evt_fn evt_func;             /*!< Callback function to use on connection */
             uint8_t num;                        /*!< Connection number used for start */
+            uint8_t socket_id;                  /*!< Socket ID assigned by module */
             lwcell_conn_connect_res_t conn_res; /*!< Connection result status */
         } conn_start;                           /*!< Structure for starting new connection */
 
