@@ -766,7 +766,7 @@ lwcelli_parse_received(lwcell_recv_t* rcv) {
 #endif                                                                                 /* LWCELL_CFG_CONN */
         } else if (!strncmp(rcv->data, "+CREG", 5)) {                                  /* Check for +CREG indication */
             lwcelli_parse_creg(rcv->data, LWCELL_U8(CMD_IS_CUR(LWCELL_CMD_CREG_GET))); /* Parse +CREG response */
-        } else if (!strncmp(rcv->data, "+CEREG", 5)) {                                  /* Check for +CEREG indication */
+        } else if (!strncmp(rcv->data, "+CEREG", 5)) {                                 /* Check for +CEREG indication */
             lwcelli_parse_cereg(rcv->data, LWCELL_U8(CMD_IS_CUR(LWCELL_CMD_CEREG_GET))); /* Parse +CREG response */
         } else if (!strncmp(rcv->data, "+CPIN", 5)) { /* Check for +CPIN indication for SIM */
             lwcelli_parse_cpin(rcv->data, 1 /* !CMD_IS_DEF(LWCELL_CMD_CPIN_SET) */); /* Parse +CPIN response */
@@ -1001,6 +1001,20 @@ lwcelli_parse_received(lwcell_recv_t* rcv) {
             }
             lwcelli_process_cipsend_response(rcv, &stat);
 #endif /* LWCELL_CFG_CONN */
+        } else if (CMD_IS_CUR(LWCELL_CMD_REBOOT))
+        {
+            // OK is sent before boot event.
+            if (stat.is_ok)
+            {
+                stat.is_ok = 0;
+            }
+            if (!strncmp(rcv->data, "%BOOTEV:", 8)) {
+                lwcelli_send_cb(LWCELL_EVT_BOOT_COMPLETE);
+                stat.is_ok = 1;
+            }
+        } else if (CMD_IS_CUR(LWCELL_CMD_SOCKETCMD_ALLOCATE)) {
+            if (!stat.is_error) {}
+
 #if LWCELL_CFG_USSD
         } else if (CMD_IS_CUR(LWCELL_CMD_CUSD)) {
             /* OK is returned before +CUSD */
@@ -1703,6 +1717,44 @@ lwcelli_process_sub_cmd(lwcell_msg_t* msg, lwcell_status_flags_t* stat) {
                 msg->msg.conn_close.conn->status.f.active && msg->msg.conn_close.conn->status.f.client;
             lwcelli_send_conn_cb(msg->msg.conn_close.conn, NULL);
         }
+    } else if (CMD_IS_DEF(LWCELL_CMD_SOCKETCMD)) {
+        if (!msg->i && CMD_IS_CUR(LWCELL_CMD_SOCKETCMD_ALLOCATE)) { /* Was the current command status info? */
+            if (stat->is_ok) {
+                SET_NEW_CMD(LWCELL_CMD_SOCKETCMD_SETOPT); /* Set options */
+            }
+        } else if (msg->i == 1 && CMD_IS_CUR(LWCELL_CMD_SOCKETCMD_SETOPT)) {
+            SET_NEW_CMD(LWCELL_CMD_SOCKETCMD_ACTIVATE); /* Now actually start connection */
+        } else if (msg->i == 2 && CMD_IS_CUR(LWCELL_CMD_SOCKETCMD_ACTIVATE)) {
+            SET_NEW_CMD(LWCELL_CMD_SOCKETCMD_INFO); /* Go to status mode */
+            if (stat->is_error) {
+                msg->msg.conn_start.conn_res = LWCELL_CONN_CONNECT_ERROR;
+            }
+        } else if (msg->i == 3 && CMD_IS_CUR(LWCELL_CMD_SOCKETCMD_INFO)) {
+            /* After second CIP status, define what to do next */
+            switch (msg->msg.conn_start.conn_res) {
+                case LWCELL_CONN_CONNECT_OK: {                                      /* Successfully connected */
+                    lwcell_conn_t* conn = &lwcell.m.conns[msg->msg.conn_start.num]; /* Get connection number */
+
+                    lwcell.evt.type = LWCELL_EVT_CONN_ACTIVE; /* Connection just active */
+                    lwcell.evt.evt.conn_active_close.client = 1;
+                    lwcell.evt.evt.conn_active_close.conn = conn;
+                    lwcell.evt.evt.conn_active_close.forced = 1;
+                    lwcelli_send_conn_cb(conn, NULL);
+                    lwcelli_conn_start_timeout(conn); /* Start connection timeout timer */
+                    break;
+                }
+                case LWCELL_CONN_CONNECT_ERROR: { /* Connection error */
+                    lwcelli_send_conn_error_cb(msg, lwcellERRCONNFAIL);
+                    stat->is_error = 1; /* Manually set error */
+                    stat->is_ok = 0;    /* Reset success */
+                    break;
+                }
+                default: {
+                    /* Do nothing as of now */
+                    break;
+                }
+            }
+        }
 #endif /* LWCELL_CFG_CONN */
 #if LWCELL_CFG_USSD
     } else if (CMD_IS_DEF(LWCELL_CMD_CUSD)) {
@@ -1766,21 +1818,84 @@ lwcelli_initiate_cmd(lwcell_msg_t* msg) {
             AT_PORT_SEND_END_AT();
             break;
         }
-        case LWCELL_CMD_NULL:
-            // Don't send anything, just wait for a positive response.
-            break;
         case LWCELL_CMD_RATACT: {
             AT_PORT_SEND_BEGIN_AT();
             AT_PORT_SEND_CONST_STR("%RATACT=\"");
             AT_PORT_SEND_STR(msg->msg.ratact.rat_name);
             AT_PORT_SEND_CONST_STR("\",");
-            if (msg->msg.ratact.persistent)
-            {
+            if (msg->msg.ratact.persistent) {
                 AT_PORT_SEND_CONST_STR("\"1\"");
             } else {
 
                 AT_PORT_SEND_CONST_STR("\"0\"");
             }
+            AT_PORT_SEND_END_AT();
+            break;
+        }
+        case LWCELL_CMD_SOCKETCMD_ALLOCATE: { /* Start a new connection */
+            lwcell_conn_t* c = NULL;
+
+            /* Do we have network connection? */
+            /* Check if we are connected to network */
+
+            msg->msg.conn_start.num = 0;                              /* Start with max value = invalidated */
+            for (int16_t i = LWCELL_CFG_MAX_CONNS - 1; i >= 0; --i) { /* Find available connection */
+                if (!lwcell.m.conns[i].status.f.active) {
+                    c = &lwcell.m.conns[i];
+                    c->num = LWCELL_U8(i);
+                    msg->msg.conn_start.num = LWCELL_U8(i); /* Set connection number for message structure */
+                    break;
+                }
+            }
+            if (c == NULL) {
+                lwcelli_send_conn_error_cb(msg, lwcellERRNOFREECONN);
+                return lwcellERRNOFREECONN; /* We don't have available connection */
+            }
+
+            if (msg->msg.conn_start.conn != NULL) { /* Is user interested about connection info? */
+                *msg->msg.conn_start.conn = c;      /* Save connection for user */
+            }
+
+            AT_PORT_SEND_BEGIN_AT();
+            AT_PORT_SEND_CONST_STR("%SOCKETCMD=");
+            lwcelli_send_string("ALLOCATE", 0, 1, 0);
+            static const int kPdpCtx = 1;
+            lwcelli_send_number(kPdpCtx, 0, 1);
+            if (msg->msg.conn_start.type == LWCELL_CONN_TYPE_UDP) {
+                lwcelli_send_string("UDP", 0, 1, 1);
+            } else {
+                lwcelli_send_string("TCP", 0, 1, 1);
+            }
+            // TODO Implement LISTEN/LISTENP sockets
+            lwcelli_send_string("OPEN", 0, 1, 1);
+            lwcelli_send_string(msg->msg.conn_start.host, 0, 1, 1);
+            lwcelli_send_port(msg->msg.conn_start.port, 0, 1);
+            // Auto source port
+            lwcelli_send_port(0, 0, 1);
+            AT_PORT_SEND_END_AT();
+            break;
+        }
+
+        case LWCELL_CMD_SOCKETCMD_SETOPT: {
+            AT_PORT_SEND_BEGIN_AT();
+            AT_PORT_SEND_CONST_STR("%SOCKETCMD=");
+            lwcelli_send_string("SETOPT", 0, 1, 0);
+            static const int temp_socket_id = 1;
+            lwcelli_send_number(temp_socket_id, 0, 1);
+            static const int kUdpAggregationTimeMs = 36000;
+            lwcelli_send_number(kUdpAggregationTimeMs, 0, 1);
+            static const int kUdpBufferAggregation = 1500;
+            lwcelli_send_number(kUdpBufferAggregation, 0, 1);
+            AT_PORT_SEND_END_AT();
+            break;
+        }
+
+        case LWCELL_CMD_SOCKETCMD_ACTIVATE: {
+            AT_PORT_SEND_BEGIN_AT();
+            AT_PORT_SEND_CONST_STR("%SOCKETCMD=");
+            lwcelli_send_string("ACTIVATE", 0, 1, 0);
+            static const int temp_socket_id = 1;
+            lwcelli_send_number(temp_socket_id, 0, 1);
             AT_PORT_SEND_END_AT();
             break;
         }

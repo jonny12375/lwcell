@@ -260,7 +260,17 @@ typedef enum {
     LWCELL_CMD_RATACT,       /*!< muRata RATACT */
     LWCELL_CMD_CEREG_SET,    /*!< Network Registration set output */
     LWCELL_CMD_CEREG_GET,    /*!< Get current network registration status */
-    LWCELL_CMD_NULL,         /*!< Send nothing, wait for a response. */
+
+    LWCELL_CMD_SOCKETCMD,   /*!< muRata socket command */
+    LWCELL_CMD_SOCKETDATA,  /*!< muRata socket data */
+    LWCELL_CMD_SOCKET_EVENT,/*!< muRata socket events */
+
+    LWCELL_CMD_SOCKETCMD_ALLOCATE,
+    LWCELL_CMD_SOCKETCMD_SETOPT,
+    LWCELL_CMD_SOCKETCMD_ACTIVATE,
+    LWCELL_CMD_SOCKETCMD_INFO,
+
+    LWCELL_CMD_SOCKETDATA_SEND,
 
     LWCELL_CMD_END, /*!< Last CMD entry */
 } lwcell_cmd_t;
