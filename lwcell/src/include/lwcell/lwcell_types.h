@@ -424,6 +424,7 @@ typedef enum lwcell_cb_type_t {
     LWCELL_EVT_PB_SEARCH, /*!< Phonebook search event */
 #endif                    /* LWCELL_CFG_PHONEBOOK || __DOXYGEN__ */
     LWCELL_EVT_BOOT_COMPLETE,
+    LWCELL_EVT_GNSS_FIX,
 } lwcell_evt_type_t;
 
 /**

@@ -272,6 +272,10 @@ typedef enum {
 
     LWCELL_CMD_SOCKETDATA_SEND,
 
+    LWCELL_CMD_NOTIFYEV,
+    LWCELL_CMD_IGNSSACT,
+    LWCELL_CMD_IGNSSEV,
+
     LWCELL_CMD_END, /*!< Last CMD entry */
 } lwcell_cmd_t;
 
@@ -561,6 +565,20 @@ typedef struct lwcell_msg {
             const char* rat_name;
             uint8_t persistent;
         } ratact;
+
+        struct {
+            const char* event_type;
+            uint8_t enable;
+        } notifyev;
+
+        struct {
+            uint8_t mode;
+        } ignssact;
+
+        struct {
+            const char* event_type;
+            uint8_t enable;
+        } ignssev;
     } msg;                    /*!< Group of different possible message contents */
 } lwcell_msg_t;
 

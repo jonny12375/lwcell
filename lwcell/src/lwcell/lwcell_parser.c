@@ -1036,4 +1036,16 @@ lwcelli_parse_ipd(const char* str) {
     return 1;
 }
 
+uint8_t lwcelli_parse_ignssev(const char* str)
+{
+    str += 11;
+    char event_type[20];
+    lwcelli_parse_string(&str, event_type, 20, 0);
+    if (!strncmp(event_type, "FIX", 3))
+    {
+        return 1;
+    }
+    return 0;
+}
+
 #endif /* LWCELL_CFG_CONN */

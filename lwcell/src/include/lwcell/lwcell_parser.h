@@ -73,6 +73,8 @@ lwcelli_parse_socketcmd_allocate(const char* str);
 uint8_t
 lwcelli_parse_socketdata_send(const char* str, uint8_t *socket_id, size_t* data_sent);
 
+uint8_t lwcelli_parse_ignssev(const char* str);
+
 uint8_t lwcelli_parse_ipd(const char* str);
 
 #if defined(__cplusplus)

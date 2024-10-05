@@ -607,15 +607,14 @@ lwcelli_socket_tcpip_process_send_data(void) {
     AT_PORT_SEND_BEGIN_AT();
     AT_PORT_SEND_CONST_STR("%SOCKETDATA=");
     lwcelli_send_string("SEND", 0, 1, 0);
-    lwcelli_send_number(LWCELL_U32(c->socket_id), 0, 1); /* Send socket ID */
+    lwcelli_send_number(LWCELL_U32(c->socket_id), 0, 1);                   /* Send socket ID */
     lwcelli_send_number(LWCELL_U32(lwcell.msg->msg.conn_send.sent), 0, 1); /* Send length number */
 
     AT_PORT_SEND_STR(",\"");
-    for (size_t i = 0; i < lwcell.msg->msg.conn_send.sent; i++ )
-    {
+    for (size_t i = 0; i < lwcell.msg->msg.conn_send.sent; i++) {
         char str[2];
         lwcell_u8_to_hex_str(lwcell.msg->msg.conn_send.data[i], str, 2);
-        AT_PORT_SEND_STR(str);         /* Send str */
+        AT_PORT_SEND_STR(str); /* Send str */
     }
     AT_PORT_SEND_CHR("\"");
 
@@ -853,6 +852,11 @@ lwcelli_parse_received(lwcell_recv_t* rcv) {
         if (!strncmp(rcv->data, "%BOOTEV:", 8)) {
             lwcelli_send_cb(LWCELL_EVT_BOOT_COMPLETE);
             stat.is_ok = 1;
+        } else if (!strncmp(rcv->data, "%IGNSSEVU:", 10)) {
+            const uint8_t type = lwcelli_parse_ignssev(rcv->data);
+            if (type == 1) {
+                lwcelli_send_cb(LWCELL_EVT_GNSS_FIX);
+            }
         }
     }
 
@@ -1036,11 +1040,9 @@ lwcelli_parse_received(lwcell_recv_t* rcv) {
             }
             lwcelli_process_cipsend_response(rcv, &stat);
 #endif /* LWCELL_CFG_CONN */
-        } else if (CMD_IS_CUR(LWCELL_CMD_REBOOT))
-        {
+        } else if (CMD_IS_CUR(LWCELL_CMD_REBOOT)) {
             // OK is sent before boot event.
-            if (stat.is_ok)
-            {
+            if (stat.is_ok) {
                 stat.is_ok = 0;
             }
             if (!strncmp(rcv->data, "%BOOTEV:", 8)) {
@@ -1049,19 +1051,17 @@ lwcelli_parse_received(lwcell_recv_t* rcv) {
             }
         } else if (CMD_IS_CUR(LWCELL_CMD_SOCKETCMD_ALLOCATE)) {
             if (!stat.is_error) {
-                if (!strncmp(rcv->data, "%SOCKETCMD:", 11))
-                {
+                if (!strncmp(rcv->data, "%SOCKETCMD:", 11)) {
                     const uint8_t port_num = lwcelli_parse_socketcmd_allocate(rcv->data);
-                    lwcell_conn_t *conn = *lwcell.msg->msg.conn_start.conn;
+                    lwcell_conn_t* conn = *lwcell.msg->msg.conn_start.conn;
                     conn->socket_id = port_num;
                     lwcell.msg->msg.conn_start.socket_id = port_num;
                 }
             }
         } else if (CMD_IS_CUR(LWCELL_CMD_SOCKETCMD_ACTIVATE)) {
-            if (stat.is_ok)
-            {
+            if (stat.is_ok) {
                 lwcell.msg->msg.conn_start.conn_res = LWCELL_CONN_CONNECT_OK;
-                lwcell_conn_t *conn = *lwcell.msg->msg.conn_start.conn;
+                lwcell_conn_t* conn = *lwcell.msg->msg.conn_start.conn;
                 conn->status.f.client = 1;
 
                 uint8_t id = conn->val_id;
@@ -1075,13 +1075,11 @@ lwcelli_parse_received(lwcell_recv_t* rcv) {
                 conn->socket_id = lwcell.msg->msg.conn_start.socket_id;
             }
         } else if (CMD_IS_CUR(LWCELL_CMD_SOCKETDATA_SEND)) {
-            if (!strncmp(rcv->data, "%SOCKETDATA:", 12))
-            {
+            if (!strncmp(rcv->data, "%SOCKETDATA:", 12)) {
                 uint8_t socket_id;
                 size_t data_sent;
                 lwcelli_parse_socketdata_send(rcv->data, &socket_id, &data_sent);
-                if (socket_id == lwcell.msg->msg.conn_send.conn->socket_id)
-                {
+                if (socket_id == lwcell.msg->msg.conn_send.conn->socket_id) {
                     lwcell.msg->msg.conn_send.sent_all += data_sent;
                     lwcell.msg->msg.conn_send.btw -= data_sent;
                     lwcell.msg->msg.conn_send.ptr += data_sent;
@@ -1979,6 +1977,32 @@ lwcelli_initiate_cmd(lwcell_msg_t* msg) {
         }
         case LWCELL_CMD_SOCKETDATA_SEND: {
             return lwcelli_socket_tcpip_process_send_data(); /* Process send data */
+        }
+
+        case LWCELL_CMD_NOTIFYEV: {
+            AT_PORT_SEND_BEGIN_AT();
+            AT_PORT_SEND_CONST_STR("%NOTIFYEV=");
+            lwcelli_send_string(msg->msg.notifyev.event_type, 0, 1, 0);
+            lwcelli_send_number(msg->msg.notifyev.enable, 0, 1);
+            AT_PORT_SEND_END_AT();
+            break;
+        }
+
+        case LWCELL_CMD_IGNSSACT: {
+            AT_PORT_SEND_BEGIN_AT();
+            AT_PORT_SEND_CONST_STR("%IGNSSACT=");
+            lwcelli_send_number(msg->msg.ignssact.mode, 0, 0);
+            AT_PORT_SEND_END_AT();
+            break;
+        }
+
+        case LWCELL_CMD_IGNSSEV: {
+            AT_PORT_SEND_BEGIN_AT();
+            AT_PORT_SEND_CONST_STR("%IGNSSEV=");
+            lwcelli_send_string(msg->msg.ignssev.event_type, 0, 1, 0);
+            lwcelli_send_number(msg->msg.ignssev.enable, 0, 1);
+            AT_PORT_SEND_END_AT();
+            break;
         }
 
         case LWCELL_CMD_ATE0:
